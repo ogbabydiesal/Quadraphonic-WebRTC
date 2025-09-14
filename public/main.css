@@ -1,9 +1,55 @@
+html{
+    overflow: hidden;
+}
 body {
     background: #ECEFF1;
     color: rgba(0, 0, 0, 0.87);
-    font-family: Roboto, Helvetica, Arial, sans-serif;
+    font-family: 'Times New Roman', Times, serif;
     margin: 0;
     padding: 0;
+}
+
+h1 {
+    font-size: 1em;
+    font-weight: normal;
+    font-style: italic;
+}
+
+video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: auto;
+    object-fit: cover;
+}
+
+/* Second video blends with the first */
+.blend {
+    mix-blend-mode: screen; /* try multiply, overlay, lighten, etc. */
+    opacity: 0.8;           /* optional for intensity */
+}
+
+#info {
+    display:flex;
+    align-items: center;
+    justify-content: center;
+    width:50px;
+    height:50px;
+    border-radius: 34px;
+    border: black 1px solid;
+    text-align: center;
+    cursor: pointer;
+    position: fixed;
+    z-index: 1100;
+}
+
+#localVideo {
+    display: none;
+}
+
+#remoteVideo {
+    display: none;
 }
 
 #message {
@@ -55,19 +101,53 @@ body {
     font-size: 13px;
 }
 
+
+#buttons {
+    border-style: dashed;
+    border-width: 1px;
+    border-color: rgba(0, 0, 0, 0.12);
+    width:220px;
+    flex-direction: column;
+    background-color: white;
+}
+
+#infoContainer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+
+p {
+    margin: 4px;
+    padding:4px;
+    font-size: 12px;
+}
+
+select {
+    margin: 4px;
+    padding: 4px;
+    font-size: 12px;
+    width:200px;
+}
+
 @media (max-width: 600px) {
     body, #message {
         margin-top: 0;
         background: white;
         box-shadow: none;
     }
-
-    body {
-        border-top: 16px solid #ffa100;
-    }
 }
 
 body {
+    background: #ECEFF1;
     margin: 1em;
 }
 
@@ -75,16 +155,4 @@ button {
     margin: 0.2em 0.1em;
 }
 
-div#videos {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-}
 
-div#videos > video {
-    background: black;
-    width: 640px;
-    height: 100%;
-    display: block;
-    margin: 1em;
-}

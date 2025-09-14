@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to FirebaseRTC</title>
+    <title>Distant Streams - October 2025</title>
     <link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet">
     <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
@@ -18,33 +18,48 @@
     <link rel="stylesheet" type="text/css" href="main.css">
 </head>
 <body>
-<h1>Welcome to FirebaseRTC!</h1>
-<div id="buttons">
-    <button class="mdc-button mdc-button--raised" id="cameraBtn">
-        <i class="material-icons mdc-button__icon" aria-hidden="true">perm_camera_mic</i>
-        <span class="mdc-button__label">Open camera & microphone</span>
-    </button>
-    <button class="mdc-button mdc-button--raised" disabled id="createBtn">
-        <i class="material-icons mdc-button__icon" aria-hidden="true">group_add</i>
-        <span class="mdc-button__label">Create room</span>
-    </button>
-    <button class="mdc-button mdc-button--raised" disabled id="joinBtn">
-        <i class="material-icons mdc-button__icon" aria-hidden="true">group</i>
-        <span class="mdc-button__label">Join room</span>
-    </button>
-    <button class="mdc-button mdc-button--raised" disabled id="hangupBtn">
-        <i class="material-icons mdc-button__icon" aria-hidden="true">close</i>
-        <span class="mdc-button__label">Hangup</span>
-    </button>
+<h1>distant-streams~</h1>
+<div id="videos" >
+    <video id="localVideo" muted autoplay playsinline style="display:none"></video>
+    <video id="remoteVideo" autoplay playsinline style="display:none" class="blend"></video>
 </div>
-<div>
-    <span id="currentRoom"></span>
+<div id="info">
+    i
 </div>
-<div id="videos">
-    <video id="localVideo" muted autoplay playsinline></video>
-    <video id="remoteVideo" autoplay playsinline></video>
-</div>
-<div class="mdc-dialog"
+<div id="infoContainer">
+    <div id="buttons">
+        <p>distant-streams is a web application that allows two remote performers to share spatial audio mixes in real-time.</p>
+        <button id="inDeviceBtn">
+            <span>Scan for Audio Devices</span>
+        </button>
+        
+        <select id="audioInputSelect" value="select audio input">
+            <option disabled selected value="">scan for devices</option>
+        </select>
+        <select id="audioInputSelect2" value="select audio input">
+            <option disabled selected value="">scan for devices</option>
+        </select>
+        <button id="cameraBtn">
+            <span>Open camera & microphone</span>
+        </button>
+        <button disabled id="createBtn">
+            
+            <span>Create room</span>
+            
+        </button>
+        <button disabled id="joinBtn">
+            
+            <span>Join room</span>
+        </button>
+        <button disabled id="hangupBtn">
+            
+            <span>Hangup</span>
+        </button>
+        <div>
+            <span style = "width:100px; height:20px;" id="currentRoom"></span>
+        </div>
+        <div
+        class="mdc-dialog"
      id="room-dialog"
      role="alertdialog"
      aria-modal="true"
@@ -52,13 +67,13 @@
      aria-describedby="my-dialog-content">
     <div class="mdc-dialog__container">
         <div class="mdc-dialog__surface">
-            <h2 class="mdc-dialog__title" id="my-dialog-title">Join room</h2>
-            <div class="mdc-dialog__content" id="my-dialog-content">
+            <h3 id="my-dialog-title">Join room</h3>
+            <div id="my-dialog-content">
                 Enter ID for room to join:
-                <div class="mdc-text-field">
-                    <input type="text" id="room-id" class="mdc-text-field__input">
-                    <label class="mdc-floating-label" for="my-text-field">Room ID</label>
-                    <div class="mdc-line-ripple"></div>
+                <div>
+                    <input type="text" id="room-id">
+                    <label for="my-text-field">Room ID</label>
+                    <div></div>
                 </div>
             </div>
             <footer class="mdc-dialog__actions">
@@ -72,8 +87,14 @@
             </footer>
         </div>
     </div>
-    <div class="mdc-dialog__scrim"></div>
+    <div ></div>
 </div>
-<script src="app.js"></script>
+    </div>
+    
+</div>
+
+
+
+<script src="app.js" type="module"></script>
 </body>
 </html>
