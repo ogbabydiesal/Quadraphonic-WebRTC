@@ -28,17 +28,22 @@
 </div>
 <div id="infoContainer">
     <div id="buttons">
-        <p>distant-streams is a web application that allows two remote performers to share spatial audio mixes in real-time.</p>
+        <p>distant-streams is a web application that allows two remote performers to share quadraphonic sound in real-time over WebRTC.</p>
         <button id="inDeviceBtn">
-            <span>Scan for Audio Devices</span>
+            <span>Search for Sound and Video Devices</span>
         </button>
-        
+        <p>audio device</p>
         <select id="audioInputSelect" value="select audio input">
             <option disabled selected value="">scan for devices</option>
         </select>
         <select id="audioInputSelect2" value="select audio input">
             <option disabled selected value="">scan for devices</option>
         </select>
+        <p>video device</p>
+        <select id="videoInputSelect" value="select video input">
+            <option disabled selected value="">scan for devices</option>
+        </select>
+
         <button id="cameraBtn">
             <span>Open camera & microphone</span>
         </button>
@@ -48,11 +53,9 @@
             
         </button>
         <button disabled id="joinBtn">
-            
             <span>Join room</span>
         </button>
         <button disabled id="hangupBtn">
-            
             <span>Hangup</span>
         </button>
         <div>

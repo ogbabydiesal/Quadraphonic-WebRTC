@@ -3,17 +3,23 @@ import { handleTrackEvent } from './trackHandler.js';
 let audioContext = null;
 let channels = 2; // Default to stereo
 let audioTracks = [];
+let gains = [];
 mdc.ripple.MDCRipple.attachTo(document.querySelector('.mdc-button'));
 
 const configuration = {
-  iceServers: [
-    {
-      urls: [
-        'stun:stun1.l.google.com:19302',
-        'stun:stun2.l.google.com:19302',
-      ],
-    },
-  ],
+  iceServers: [{
+   urls: [ "stun:us-turn1.xirsys.com" ]}, {
+   username: "7H2qmpDLA7VVsPxy8WgM8EVdh5qLSdqsIeqISxYj2Ge8YtOorR0iMxSeJDtFYa9BAAAAAGjUsoVvZ2JhYnlkaWVzYWw=",
+   credential: "1dbc5ed8-99bd-11f0-9ed2-0242ac140004",
+   urls: [
+       "turn:us-turn1.xirsys.com:80?transport=udp",
+       "turn:us-turn1.xirsys.com:3478?transport=udp",
+       "turn:us-turn1.xirsys.com:80?transport=tcp",
+       "turn:us-turn1.xirsys.com:3478?transport=tcp",
+       "turns:us-turn1.xirsys.com:443?transport=tcp",
+       "turns:us-turn1.xirsys.com:5349?transport=tcp"
+    ]
+  }],
   iceCandidatePoolSize: 10,
 };
 
@@ -22,34 +28,44 @@ let localStream = null;
 let remoteStream = null;
 let roomDialog = null;
 let roomId = null;
-let gains = [];
+
 let inputDevice = null;
 let inputDevice2 = null;
+let inputDevice_Video = null;
 
 let infoPanel = false;
 //mouse click
 document.querySelector('#info').addEventListener('click', () => {
   infoPanel = !infoPanel;
   document.querySelector('#infoContainer').style.display = infoPanel ? 'flex' : 'none';
-  console.log('Info panel toggled:', infoPanel);
 });
 
+function getAudioVideoInputDevices() {
+  getAudioInputDevices();
+  getVideoInputDevices();
+}
+
 function init() {
-  document.querySelector('#inDeviceBtn').addEventListener('click', getAudioInputDevices);
+  document.querySelector('#inDeviceBtn').addEventListener('click', getAudioVideoInputDevices);
   document.getElementById('audioInputSelect').addEventListener('change', async (e) => {
     inputDevice = e.target.value;
+    console.log('Selected input device:', inputDevice);
 
   });
   document.getElementById('audioInputSelect2').addEventListener('change', async (e) => {
     inputDevice2 = e.target.value;
+    console.log('Selected input device 2:', inputDevice2);
 
   });
+  document.getElementById('videoInputSelect').addEventListener('change', async (e) => {
+    inputDevice_Video = e.target.value;
+    console.log('Selected video device:', inputDevice_Video);
+  });
+
   document.querySelector('#cameraBtn').addEventListener('click', openUserMedia);
   document.querySelector('#hangupBtn').addEventListener('click', hangUp);
   document.querySelector('#createBtn').addEventListener('click', createRoom);
   document.querySelector('#joinBtn').addEventListener('click', joinRoom);
-  //document.querySelector('#audioCheckboxCh_1').addEventListener('click', toggleAudioChannel(0));
-  //document.querySelector('#audioCheckboxCh_2').addEventListener('click', toggleAudioChannel(1));
   roomDialog = new mdc.dialog.MDCDialog(document.querySelector('#room-dialog'));
 }
 
@@ -76,9 +92,11 @@ async function createRoom() {
   document.querySelector('#joinBtn').disabled = true;
   const db = firebase.firestore();
   const roomRef = await db.collection('rooms').doc();
+  
   //comment this line out and remove fixedRoomId above when you want to use a secret pass
   //roomId = fixedRoomId;
-  console.log('Create PeerConnection with configuration: ', configuration);
+  
+  //console.log('Create PeerConnection with configuration: ', configuration);
   peerConnection = new RTCPeerConnection(configuration);
 
   registerPeerConnectionListeners();
@@ -92,7 +110,7 @@ async function createRoom() {
 
   peerConnection.addEventListener('icecandidate', event => {
     if (!event.candidate) {
-      console.log('Got final candidate!');
+      //console.log('Got final candidate!');
       return;
     }
     //console.log('Got candidate: ', event.candidate);
@@ -117,9 +135,9 @@ async function createRoom() {
     },
   };
   await roomRef.set(roomWithOffer);
-  console.log('roomWithOffer:' + roomWithOffer)
+  //console.log('roomWithOffer:' + roomWithOffer)
   roomId = roomRef.id;
-  console.log(`New room created with SDP offer. Room ID: ${roomRef.id}`);
+  //console.log(`New room created with SDP offer. Room ID: ${roomRef.id}`);
   //write the roomRef to the UI
   
   document.querySelector(
@@ -127,15 +145,60 @@ async function createRoom() {
   // Code for creating a room above
 
   peerConnection.addEventListener('track', event => {
-    //console.log('Got remote track:', event.streams[0]);
-    event.streams[0].getTracks().forEach(track => {
-      //console.log('Add a track to the remoteStream:', track);
-      //ensure the remote stream track is stereo
-  
-      remoteStream.addTrack(track);
-      remoteStream.getTracks().forEach(track => {
-        console.log(`Remote Track ${track.kind} channelCount:`, track.getSettings().channelCount);
+      //console.log('Got remote track:', event.streams[0]);
+      let merger = audioContext.createChannelMerger(4);
+      merger.channelCountMode = 'explicit';
+      merger.channelInterpretation = 'speakers';
+      audioTracks = [];
+      
+      event.streams[0].getTracks().forEach(track => {
+        //console.log('Add a track to the remoteStream:', track);
+        remoteStream.addTrack(track);
+        //separate audio tracks from the remote stream
+        if (track.kind === 'audio') {
+          const splitter = audioContext.createChannelSplitter(2);
+          let newStream = new MediaStream([track]);
+          //map the audio track to web audio api //changed from createMediaStreamSource
+          const source = audioContext.createMediaStreamSource(newStream);
+          audioTracks.push(source);
+        }
+        
       });
+      // console.log('here are the audioTracks:' + audioTracks);
+      // console.log(audioTracks.length + ' audio tracks connected');
+      for (let i = 0; i < 4; i++) {
+        const gainNode = audioContext.createGain();
+        gains.push(gainNode.gain);
+        audioTracks[i].connect(gainNode);
+        gainNode.connect(merger, 0, i);
+        //audioTracks[i].connect(merger, 0, i);
+        //console.log('connected audio track to merger');
+      }
+      
+      merger.connect(audioContext.destination);
+      audioContext.resume();
+  });
+
+  const gainSlider = document.createElement('input');
+  gainSlider.type = 'range';
+  gainSlider.min = '0';
+  gainSlider.max = '1.2';
+  gainSlider.step = '0.01';
+  gainSlider.value = '0.8';
+  gainSlider.style.width = '200px';
+  gainSlider.id = 'gainSlider';
+
+  const gainLabel = document.createElement('label');
+  gainLabel.htmlFor = 'gainSlider';
+  gainLabel.textContent = 'Peer Gain: ';
+
+  document.querySelector('#currentRoom').appendChild(gainLabel);
+  document.querySelector('#currentRoom').appendChild(gainSlider);
+
+  gainSlider.addEventListener('input', (e) => {
+    const value = parseFloat(e.target.value);
+    gains.forEach(gainParam => {
+      gainParam.value = value;
     });
   });
 
@@ -169,9 +232,9 @@ function joinRoom() {
 
   document.querySelector('#confirmJoinBtn').
       addEventListener('click', async () => {
-        console.log('Join room button clicked');
+        //console.log('Join room button clicked');
         roomId = document.querySelector('#room-id').value;
-        console.log('Join room: ', roomId);
+        //console.log('Join room: ', roomId);
         document.querySelector(
             '#currentRoom').innerText = `Current room is ${roomId} - You are the callee!`;
         await joinRoomById(roomId);
@@ -183,10 +246,10 @@ async function joinRoomById(roomId) {
   const db = firebase.firestore();
   const roomRef = db.collection('rooms').doc(`${roomId}`);
   const roomSnapshot = await roomRef.get();
-  console.log('Got room:', roomSnapshot.exists);
+  //console.log('Got room:', roomSnapshot.exists);
 
   if (roomSnapshot.exists) {
-    console.log('Create PeerConnection with configuration: ', configuration);
+    //console.log('Create PeerConnection with configuration: ', configuration);
     peerConnection = new RTCPeerConnection(configuration);
     registerPeerConnectionListeners();
     localStream.getTracks().forEach(track => {
@@ -206,7 +269,7 @@ async function joinRoomById(roomId) {
     // Code for collecting ICE candidates above
 
     peerConnection.addEventListener('track', event => {
-      console.log('Got remote track:', event.streams[0]);
+      //console.log('Got remote track:', event.streams[0]);
       let merger = audioContext.createChannelMerger(4);
       merger.channelCountMode = 'explicit';
       merger.channelInterpretation = 'speakers';
@@ -228,11 +291,37 @@ async function joinRoomById(roomId) {
       // console.log('here are the audioTracks:' + audioTracks);
       // console.log(audioTracks.length + ' audio tracks connected');
       for (let i = 0; i < 4; i++) {
-        audioTracks[i].connect(merger, 0, i);
+        const gainNode = audioContext.createGain();
+        gains.push(gainNode.gain);
+        audioTracks[i].connect(gainNode);
+        gainNode.connect(merger, 0, i);
         //console.log('connected audio track to merger');
       }
       merger.connect(audioContext.destination);
       audioContext.resume();
+    });
+
+    const gainSlider = document.createElement('input');
+    gainSlider.type = 'range';
+    gainSlider.min = '0';
+    gainSlider.max = '1.2';
+    gainSlider.step = '0.01';
+    gainSlider.value = '0.8';
+    gainSlider.style.width = '200px';
+    gainSlider.id = 'gainSlider';
+
+    const gainLabel = document.createElement('label');
+    gainLabel.htmlFor = 'gainSlider';
+    gainLabel.textContent = 'Peer Gain: ';
+
+    document.querySelector('#currentRoom').appendChild(gainLabel);
+    document.querySelector('#currentRoom').appendChild(gainSlider);
+
+    gainSlider.addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      gains.forEach(gainParam => {
+        gainParam.value = value;
+      });
     });
 
     // Code for creating SDP answer below
@@ -250,6 +339,7 @@ async function joinRoomById(roomId) {
         sdp: answer.sdp,
       },
     };
+
     await roomRef.update(roomWithAnswer);
     // Code for creating SDP answer above
 
@@ -270,13 +360,30 @@ async function joinRoomById(roomId) {
 }
 
 async function openUserMedia() {
+  // console.log('openUserMedia() called');
+  // console.log('=== DEVICE DEBUG ===');
+  // console.log('inputDevice variable:', inputDevice);
+  //debug the input device name
+  if (inputDevice) {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const selectedDevice = devices.find(device => device.deviceId === inputDevice);
+    console.log('Selected input device name:', selectedDevice ? selectedDevice.label : 'Unknown device');
+  }
+  // console.log('inputDevice2 variable:', inputDevice2);
+  // console.log('Dropdown 1 selected:', document.getElementById('audioInputSelect').value);
+  // console.log('Dropdown 2 selected:', document.getElementById('audioInputSelect2').value);
   //use device 4 as the microphone input
   const stream = await navigator.mediaDevices.getUserMedia(
       {
-        video: true, 
+        video: {
+          deviceId: inputDevice_Video ? { exact: inputDevice_Video } : undefined,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        },
         audio: {
-          deviceId: inputDevice,
-          channelCount: {exact: channels},
+          deviceId: inputDevice ? { exact: inputDevice } : undefined,
+          channelCount: 2,
           sampleRate: 48000,
           sampleSize: 16,
           echoCancellation: false, //wierdly 
@@ -287,8 +394,8 @@ async function openUserMedia() {
     {
       video: false,
       audio: {
-        deviceId: inputDevice2,
-        channelCount: {exact: channels},
+        deviceId: inputDevice2 ? { exact: inputDevice2 } : undefined,
+        channelCount: 2,
         sampleRate: 48000,
         sampleSize: 16,
         echoCancellation: false,
@@ -329,8 +436,6 @@ async function openUserMedia() {
   leftNode.connect(RTCdestination);
   rightNode.connect(RTCdestination2);
 
-
-
   const audioOnlyStream2 = new MediaStream(stream2.getAudioTracks());
   audioOnlyStream2.channelCount = channels;
   audioOnlyStream2.channelCountMode = 'explicit';
@@ -354,16 +459,6 @@ async function openUserMedia() {
   //start the microphone input
   await audioContext.resume();
   
-  
-  //console.log('RTCdestination channel count:', RTCdestination.channelCount);
-  //console.log('rtc track settings:', RTCdestination.stream.getAudioTracks()[0].getSettings());
-  //const destination = audioContext.createMediaStreamDestination({ numberOfChannels: numInputChannels });
-  //source.connect(RTCdestination);
-  // source.connect(RTCdestination);
-  // source2.connect(RTCdestination2);
-  // source2.connect(RTCdestination3);
-  // source2.connect(RTCdestination4);
-  //console.log('sourcety channel count:',source.channelCount);
   // 🎥 Merge with video
   const combinedStream = new MediaStream();
 
@@ -374,8 +469,8 @@ async function openUserMedia() {
   RTCdestination3.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
   RTCdestination4.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
   combinedStream.getTracks().forEach(track => {
-    console.log(`Track ${track.kind} settings:`, track.getSettings());
-    console.log(`Track ${track.kind} constraints:`, track.getConstraints());
+    //.log(`Track ${track.kind} settings:`, track.getSettings());
+    //console.log(`Track ${track.kind} constraints:`, track.getConstraints());
   });
 
   document.querySelector('#localVideo').srcObject = stream;
@@ -416,6 +511,25 @@ async function getAudioInputDevices() {
     })
     .catch(error => {
       console.error('Error getting audio input devices:', error);
+    });
+}
+
+async function getVideoInputDevices() {
+  await  navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  navigator.mediaDevices.enumerateDevices()
+    .then(devices => {
+      const videoInputDevices = devices.filter(device => device.kind === 'videoinput');
+      const videoInputSelect = document.getElementById('videoInputSelect');
+      videoInputSelect.innerHTML = '';
+      videoInputDevices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Camera ${videoInputDevices.indexOf(device) + 1}`;
+        videoInputSelect.appendChild(option);
+      });
+    })
+    .catch(error => {
+      console.error('Error getting video input devices:', error);
     });
 }
 
@@ -474,21 +588,19 @@ async function hangUp(e) {
 
 function registerPeerConnectionListeners() {
   peerConnection.addEventListener('icegatheringstatechange', () => {
-    console.log(
-        `ICE gathering state changed: ${peerConnection.iceGatheringState}`);
+    //console.log(`ICE gathering state changed: ${peerConnection.iceGatheringState}`);
   });
 
   peerConnection.addEventListener('connectionstatechange', () => {
-    console.log(`Connection state change: ${peerConnection.connectionState}`);
+    //console.log(`Connection state change: ${peerConnection.connectionState}`);
   });
 
   peerConnection.addEventListener('signalingstatechange', () => {
-    console.log(`Signaling state change: ${peerConnection.signalingState}`);
+    //console.log(`Signaling state change: ${peerConnection.signalingState}`);
   });
 
   peerConnection.addEventListener('iceconnectionstatechange ', () => {
-    console.log(
-        `ICE connection state change: ${peerConnection.iceConnectionState}`);
+    //console.log(`ICE connection state change: ${peerConnection.iceConnectionState}`);
   });
 }
 
