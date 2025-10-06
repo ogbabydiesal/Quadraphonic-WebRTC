@@ -23,12 +23,6 @@ Download and install the [Blackhole](https://existential.audio/blackhole/).
 
 Blackhole acts as a virtual sound card and should be set as the output device in your DAW. 
 
-(your multichannel soundcard must be configured as a Quadraphonic output device in your OS system settings).
-
-![Screenshot 2025-09-05 at 4.12.19 PM.png](documentation/quadSetup.png)
-
-this gets unzipped and placed in your Macintosh HD → Library → Audio → Plugins → HAL
-
 Set ‘Blackhole’ (with more than 2 outputs) as your Output Device.
 
 ![Screenshot 2025-09-05 at 4.06.09 PM.png](documentation/Screenshot_2025-09-05_at_4.06.09_PM.png)
