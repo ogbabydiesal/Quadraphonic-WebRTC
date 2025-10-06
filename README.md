@@ -1,4 +1,5 @@
-# Distant Streams (Firebase + WebRTC Codelab)
+# Quadraphonic-WebRTC
+### (Firebase + WebRTC Codelab)
 
 ## About
 This web application demonstrates realtime bi-directional quadraphonic audio streaming using WebRTC and the WebAudio API. It was built using the the WebRTC [FirebaseRTC example](https://github.com/webrtc/FirebaseRTC). 
@@ -34,6 +35,9 @@ Set ‘Blackhole’ (with more than 2 outputs) as your Output Device.
 ![image.png](documentation/image%201.png)
 
 Be sure to create a Monitor output in Loopback to hear your audio locally. 
+
+See the systems diagram below for an overview of the setup.
+![systemsDiagram](documentation/Distant-StreamsDiagram.jpg)
 
 ## Web Setup
 To see the hosted project visit [distant-streams.web.app](https://distant-streams.web.app/).
