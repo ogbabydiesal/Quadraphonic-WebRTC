@@ -7,19 +7,14 @@ let gains = [];
 mdc.ripple.MDCRipple.attachTo(document.querySelector('.mdc-button'));
 
 const configuration = {
-  iceServers: [{
-   urls: [ "stun:us-turn1.xirsys.com" ]}, {
-   username: "7H2qmpDLA7VVsPxy8WgM8EVdh5qLSdqsIeqISxYj2Ge8YtOorR0iMxSeJDtFYa9BAAAAAGjUsoVvZ2JhYnlkaWVzYWw=",
-   credential: "1dbc5ed8-99bd-11f0-9ed2-0242ac140004",
-   urls: [
-       "turn:us-turn1.xirsys.com:80?transport=udp",
-       "turn:us-turn1.xirsys.com:3478?transport=udp",
-       "turn:us-turn1.xirsys.com:80?transport=tcp",
-       "turn:us-turn1.xirsys.com:3478?transport=tcp",
-       "turns:us-turn1.xirsys.com:443?transport=tcp",
-       "turns:us-turn1.xirsys.com:5349?transport=tcp"
-    ]
-  }],
+   iceServers: [
+    {
+      urls: [
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+      ],
+    },
+  ],
   iceCandidatePoolSize: 10,
 };
 
@@ -141,7 +136,7 @@ async function createRoom() {
   //write the roomRef to the UI
   
   document.querySelector(
-      '#currentRoom').innerText = `Current room is ${roomRef.id} - You are the caller!`;
+      '#currentRoom').innerText = `Room ID: ${roomRef.id} - You are the caller!`;
   // Code for creating a room above
 
   peerConnection.addEventListener('track', event => {
@@ -162,7 +157,6 @@ async function createRoom() {
           const source = audioContext.createMediaStreamSource(newStream);
           audioTracks.push(source);
         }
-        
       });
       // console.log('here are the audioTracks:' + audioTracks);
       // console.log(audioTracks.length + ' audio tracks connected');
@@ -185,15 +179,14 @@ async function createRoom() {
   gainSlider.max = '1.2';
   gainSlider.step = '0.01';
   gainSlider.value = '0.8';
-  gainSlider.style.width = '200px';
   gainSlider.id = 'gainSlider';
 
   const gainLabel = document.createElement('label');
   gainLabel.htmlFor = 'gainSlider';
   gainLabel.textContent = 'Peer Gain: ';
 
-  document.querySelector('#currentRoom').appendChild(gainLabel);
-  document.querySelector('#currentRoom').appendChild(gainSlider);
+  document.querySelector('#buttons').appendChild(gainLabel);
+  document.querySelector('#buttons').appendChild(gainSlider);
 
   gainSlider.addEventListener('input', (e) => {
     const value = parseFloat(e.target.value);
@@ -236,7 +229,7 @@ function joinRoom() {
         roomId = document.querySelector('#room-id').value;
         //console.log('Join room: ', roomId);
         document.querySelector(
-            '#currentRoom').innerText = `Current room is ${roomId} - You are the callee!`;
+            '#currentRoom').innerText = `Room ID: ${roomId} - You are the callee!`;
         await joinRoomById(roomId);
       }, {once: true});
   roomDialog.open();
@@ -295,7 +288,6 @@ async function joinRoomById(roomId) {
         gains.push(gainNode.gain);
         audioTracks[i].connect(gainNode);
         gainNode.connect(merger, 0, i);
-        //console.log('connected audio track to merger');
       }
       merger.connect(audioContext.destination);
       audioContext.resume();
@@ -307,15 +299,15 @@ async function joinRoomById(roomId) {
     gainSlider.max = '1.2';
     gainSlider.step = '0.01';
     gainSlider.value = '0.8';
-    gainSlider.style.width = '200px';
     gainSlider.id = 'gainSlider';
 
     const gainLabel = document.createElement('label');
     gainLabel.htmlFor = 'gainSlider';
     gainLabel.textContent = 'Peer Gain: ';
 
-    document.querySelector('#currentRoom').appendChild(gainLabel);
-    document.querySelector('#currentRoom').appendChild(gainSlider);
+    document.querySelector('#buttons').appendChild(gainLabel);
+    document.querySelector('#buttons').appendChild(gainSlider);
+
 
     gainSlider.addEventListener('input', (e) => {
       const value = parseFloat(e.target.value);
@@ -360,18 +352,12 @@ async function joinRoomById(roomId) {
 }
 
 async function openUserMedia() {
-  // console.log('openUserMedia() called');
-  // console.log('=== DEVICE DEBUG ===');
-  // console.log('inputDevice variable:', inputDevice);
   //debug the input device name
   if (inputDevice) {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const selectedDevice = devices.find(device => device.deviceId === inputDevice);
     console.log('Selected input device name:', selectedDevice ? selectedDevice.label : 'Unknown device');
   }
-  // console.log('inputDevice2 variable:', inputDevice2);
-  // console.log('Dropdown 1 selected:', document.getElementById('audioInputSelect').value);
-  // console.log('Dropdown 2 selected:', document.getElementById('audioInputSelect2').value);
   //use device 4 as the microphone input
   const stream = await navigator.mediaDevices.getUserMedia(
       {
@@ -413,7 +399,6 @@ async function openUserMedia() {
   const RTCdestination2 = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
   const RTCdestination3 = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
   const RTCdestination4 = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
-
 
   // // Step 3: Use the input stream as a source node  
   const audioOnlyStream = new MediaStream(stream.getAudioTracks());
@@ -483,7 +468,7 @@ async function openUserMedia() {
   const remoteVideoEl = document.querySelector('#remoteVideo');
   remoteVideoEl.srcObject = remoteStream;
   remoteVideoEl.style.display = 'block';
-  remoteVideoEl.muted = true;          // simplest
+  remoteVideoEl.muted = true; // simplest
   remoteVideoEl.volume = 0; 
 
   document.querySelector('#cameraBtn').disabled = true;
