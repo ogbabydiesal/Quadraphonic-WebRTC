@@ -28,7 +28,7 @@ let inputDevice = null;
 let inputDevice2 = null;
 let inputDevice_Video = null;
 
-let infoPanel = false;
+let infoPanel = true;
 //mouse click
 document.querySelector('#info').addEventListener('click', () => {
   infoPanel = !infoPanel;
