@@ -1,4 +1,4 @@
-# Quadraphonic-WebRTC
+# Multi-RTC
 ### (Firebase + WebRTC Codelab)
 
 ## About
