@@ -7,14 +7,15 @@ let gains = [];
 mdc.ripple.MDCRipple.attachTo(document.querySelector('.mdc-button'));
 
 const configuration = {
-   iceServers: [
-    {
-      urls: [
-        'stun:stun1.l.google.com:19302',
-        'stun:stun2.l.google.com:19302',
-      ],
-    },
-  ],
+  //  iceServers: [
+  //   {
+  //     urls: [
+  //       'stun:stun1.l.google.com:19302',
+  //       'stun:stun2.l.google.com:19302',
+  //     ],
+  //   },
+  // ],
+  iceServers: [{   urls: [ "stun:us-turn1.xirsys.com" ]}, {   username: "7H2qmpDLA7VVsPxy8WgM8EVdh5qLSdqsIeqISxYj2Ge8YtOorR0iMxSeJDtFYa9BAAAAAGjUsoVvZ2JhYnlkaWVzYWw=",   credential: "1dbc5ed8-99bd-11f0-9ed2-0242ac140004",   urls: [       "turn:us-turn1.xirsys.com:80?transport=udp",       "turn:us-turn1.xirsys.com:3478?transport=udp",       "turn:us-turn1.xirsys.com:80?transport=tcp",       "turn:us-turn1.xirsys.com:3478?transport=tcp",       "turns:us-turn1.xirsys.com:443?transport=tcp",       "turns:us-turn1.xirsys.com:5349?transport=tcp"   ]}],
   iceCandidatePoolSize: 10,
 };
 
