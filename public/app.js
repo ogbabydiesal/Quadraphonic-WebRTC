@@ -26,13 +26,8 @@ let roomDialog = null;
 let roomId = null;
 
 let inputDevice = null;
+let inputDevice2 = null;
 let inputDevice_Video = null;
-let outputDevice = ''; // '' = system default output
-
-// local monitor and peer playback each get their own gain before the output
-let localGainNode = null;
-let peerGainNode = null;
-let peerAudioConnected = false;
 
 let infoPanel = true;
 //mouse click
@@ -41,11 +36,9 @@ document.querySelector('#info').addEventListener('click', () => {
   document.querySelector('#infoContainer').style.display = infoPanel ? 'flex' : 'none';
 });
 
-async function getAudioVideoInputDevices() {
-  // input permission must be granted first so output labels are populated too
-  await getAudioInputDevices();
-  await getVideoInputDevices();
-  await getAudioOutputDevices();
+function getAudioVideoInputDevices() {
+  getAudioInputDevices();
+  getVideoInputDevices();
 }
 
 function init() {
@@ -55,20 +48,14 @@ function init() {
     console.log('Selected input device:', inputDevice);
 
   });
+  document.getElementById('audioInputSelect2').addEventListener('change', async (e) => {
+    inputDevice2 = e.target.value;
+    console.log('Selected input device 2:', inputDevice2);
+
+  });
   document.getElementById('videoInputSelect').addEventListener('change', async (e) => {
     inputDevice_Video = e.target.value;
     console.log('Selected video device:', inputDevice_Video);
-  });
-  document.getElementById('audioOutputSelect').addEventListener('change', async (e) => {
-    outputDevice = e.target.value;
-    console.log('Selected output device:', outputDevice || 'system default');
-    await applyOutputDevice();
-  });
-  document.getElementById('localGainSlider').addEventListener('input', (e) => {
-    setGain(localGainNode, parseFloat(e.target.value));
-  });
-  document.getElementById('peerGainSlider').addEventListener('input', (e) => {
-    setGain(peerGainNode, parseFloat(e.target.value));
   });
 
   document.querySelector('#cameraBtn').addEventListener('click', openUserMedia);
@@ -76,58 +63,6 @@ function init() {
   document.querySelector('#createBtn').addEventListener('click', createRoom);
   document.querySelector('#joinBtn').addEventListener('click', joinRoom);
   roomDialog = new mdc.dialog.MDCDialog(document.querySelector('#room-dialog'));
-}
-
-function setGain(gainNode, value) {
-  if (!gainNode) return; // sliders can move before the audio context exists
-  gainNode.gain.setTargetAtTime(value, audioContext.currentTime, 0.02);
-}
-
-async function applyOutputDevice() {
-  if (!audioContext) return; // picked up by the AudioContext constructor in openUserMedia
-  if (typeof audioContext.setSinkId !== 'function') {
-    console.warn('AudioContext.setSinkId is not supported in this browser');
-    return;
-  }
-  try {
-    await audioContext.setSinkId(outputDevice);
-    // the new device may have a different channel count (e.g. a quad interface)
-    audioContext.destination.channelCount = audioContext.destination.maxChannelCount;
-    console.log('Output channel count:', audioContext.destination.channelCount);
-  } catch (error) {
-    console.error('Error setting output device:', error);
-  }
-}
-
-// 'track' fires once per remote track (1 video + 4 audio), so only add that
-// event's track, and build the quad graph a single time once all 4 audio
-// tracks are in the stream. Building it per event played the peer ~5x over.
-function handleRemoteTrack(event) {
-  remoteStream.addTrack(event.track);
-  if (peerAudioConnected) return;
-
-  const remoteAudioTracks = event.streams[0] ? event.streams[0].getAudioTracks() : [];
-  if (remoteAudioTracks.length < 4) return; // wait for the rest of the channels
-  peerAudioConnected = true;
-
-  let merger = audioContext.createChannelMerger(4);
-  merger.channelCountMode = 'explicit';
-  merger.channelInterpretation = 'speakers';
-  audioTracks = [];
-
-  remoteAudioTracks.forEach(track => {
-    //map the audio track to web audio api
-    const source = audioContext.createMediaStreamSource(new MediaStream([track]));
-    audioTracks.push(source);
-  });
-  for (let i = 0; i < 4; i++) {
-    const gainNode = audioContext.createGain();
-    gains.push(gainNode.gain);
-    audioTracks[i].connect(gainNode);
-    gainNode.connect(merger, 0, i);
-  }
-  merger.connect(peerGainNode);
-  audioContext.resume();
 }
 
 function mungeSDP(sdp) {
@@ -205,7 +140,61 @@ async function createRoom() {
       '#currentRoom').innerText = `Room ID: ${roomRef.id} - You are the caller!`;
   // Code for creating a room above
 
-  peerConnection.addEventListener('track', handleRemoteTrack);
+  peerConnection.addEventListener('track', event => {
+      //console.log('Got remote track:', event.streams[0]);
+      let merger = audioContext.createChannelMerger(4);
+      merger.channelCountMode = 'explicit';
+      merger.channelInterpretation = 'speakers';
+      audioTracks = [];
+      
+      event.streams[0].getTracks().forEach(track => {
+        //console.log('Add a track to the remoteStream:', track);
+        remoteStream.addTrack(track);
+        //separate audio tracks from the remote stream
+        if (track.kind === 'audio') {
+          const splitter = audioContext.createChannelSplitter(2);
+          let newStream = new MediaStream([track]);
+          //map the audio track to web audio api //changed from createMediaStreamSource
+          const source = audioContext.createMediaStreamSource(newStream);
+          audioTracks.push(source);
+        }
+      });
+      // console.log('here are the audioTracks:' + audioTracks);
+      // console.log(audioTracks.length + ' audio tracks connected');
+      for (let i = 0; i < 4; i++) {
+        const gainNode = audioContext.createGain();
+        gains.push(gainNode.gain);
+        audioTracks[i].connect(gainNode);
+        gainNode.connect(merger, 0, i);
+        //audioTracks[i].connect(merger, 0, i);
+        //console.log('connected audio track to merger');
+      }
+      
+      merger.connect(audioContext.destination);
+      audioContext.resume();
+  });
+
+  const gainSlider = document.createElement('input');
+  gainSlider.type = 'range';
+  gainSlider.min = '0';
+  gainSlider.max = '1.2';
+  gainSlider.step = '0.01';
+  gainSlider.value = '0.8';
+  gainSlider.id = 'gainSlider';
+
+  const gainLabel = document.createElement('label');
+  gainLabel.htmlFor = 'gainSlider';
+  gainLabel.textContent = 'Peer Gain: ';
+
+  document.querySelector('#buttons').appendChild(gainLabel);
+  document.querySelector('#buttons').appendChild(gainSlider);
+
+  gainSlider.addEventListener('input', (e) => {
+    const value = parseFloat(e.target.value);
+    gains.forEach(gainParam => {
+      gainParam.value = value;
+    });
+  });
 
   // Listening for remote session description below
   roomRef.onSnapshot(async snapshot => {
@@ -273,7 +262,60 @@ async function joinRoomById(roomId) {
     });
     // Code for collecting ICE candidates above
 
-    peerConnection.addEventListener('track', handleRemoteTrack);
+    peerConnection.addEventListener('track', event => {
+      //console.log('Got remote track:', event.streams[0]);
+      let merger = audioContext.createChannelMerger(4);
+      merger.channelCountMode = 'explicit';
+      merger.channelInterpretation = 'speakers';
+      audioTracks = [];
+      
+      event.streams[0].getTracks().forEach(track => {
+        //console.log('Add a track to the remoteStream:', track);
+        remoteStream.addTrack(track);
+        //separate audio tracks from the remote stream
+        if (track.kind === 'audio') {
+          const splitter = audioContext.createChannelSplitter(2);
+          let newStream = new MediaStream([track]);
+          //map the audio track to web audio api //changed from createMediaStreamSource
+          const source = audioContext.createMediaStreamSource(newStream);
+          audioTracks.push(source);
+        }
+        
+      });
+      // console.log('here are the audioTracks:' + audioTracks);
+      // console.log(audioTracks.length + ' audio tracks connected');
+      for (let i = 0; i < 4; i++) {
+        const gainNode = audioContext.createGain();
+        gains.push(gainNode.gain);
+        audioTracks[i].connect(gainNode);
+        gainNode.connect(merger, 0, i);
+      }
+      merger.connect(audioContext.destination);
+      audioContext.resume();
+    });
+
+    const gainSlider = document.createElement('input');
+    gainSlider.type = 'range';
+    gainSlider.min = '0';
+    gainSlider.max = '1.2';
+    gainSlider.step = '0.01';
+    gainSlider.value = '0.8';
+    gainSlider.id = 'gainSlider';
+
+    const gainLabel = document.createElement('label');
+    gainLabel.htmlFor = 'gainSlider';
+    gainLabel.textContent = 'Peer Gain: ';
+
+    document.querySelector('#buttons').appendChild(gainLabel);
+    document.querySelector('#buttons').appendChild(gainSlider);
+
+
+    gainSlider.addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      gains.forEach(gainParam => {
+        gainParam.value = value;
+      });
+    });
 
     // Code for creating SDP answer below
     const offer = roomSnapshot.data().offer;
@@ -328,41 +370,78 @@ async function openUserMedia() {
         },
         audio: {
           deviceId: inputDevice ? { exact: inputDevice } : undefined,
-          // 4 discrete channels where the device has them (Firefox), else falls back to stereo
-          channelCount: { ideal: 4 },
+          channelCount: 2,
           sampleRate: 48000,
           sampleSize: 16,
           echoCancellation: false, //wierdly 
           noiseSuppression: false,
           autoGainControl: false,
       }});
-  const inputChannels = stream.getAudioTracks()[0].getSettings().channelCount || 2;
-  console.log('Input channel count:', inputChannels);
+  const stream2 = await navigator.mediaDevices.getUserMedia(
+    {
+      video: false,
+      audio: {
+        deviceId: inputDevice2 ? { exact: inputDevice2 } : undefined,
+        channelCount: 2,
+        sampleRate: 48000,
+        sampleSize: 16,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      }});
 
   // Step 2: Create Web Audio context
-  audioContext = new AudioContext(outputDevice ? { sinkId: outputDevice } : {});
+  audioContext = new AudioContext();
   let maxChannelCount = audioContext.destination.maxChannelCount;
   audioContext.destination.channelCount = maxChannelCount;
+  
+  // 🎯 Send to WebRTC
+  const RTCdestination = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
+  const RTCdestination2 = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
+  const RTCdestination3 = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
+  const RTCdestination4 = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
 
-  // 🔊 Local playback: monitor of our inputs, and the peer's audio (connected on 'track')
-  localGainNode = audioContext.createGain();
-  localGainNode.gain.value = parseFloat(document.getElementById('localGainSlider').value);
-  localGainNode.connect(audioContext.destination);
-  peerGainNode = audioContext.createGain();
-  peerGainNode.gain.value = parseFloat(document.getElementById('peerGainSlider').value);
-  peerGainNode.connect(audioContext.destination);
+  // // Step 3: Use the input stream as a source node  
+  const audioOnlyStream = new MediaStream(stream.getAudioTracks());
+  audioOnlyStream.channelCount = channels;
+  audioOnlyStream.channelCountMode = 'explicit';
+  audioOnlyStream.channelInterpretation = 'discrete';
 
-  // // Step 3: Use the input stream as a source node
-  const source = audioContext.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+  const source = audioContext.createMediaStreamSource(audioOnlyStream);
+  source.channelCount = channels; // Set to stereo
+  source.channelCountMode = 'explicit';
+  source.channelInterpretation = 'discrete';
 
-  // one mono WebRTC track per input channel; with a stereo device the
-  // splitter outputs silence on 3 and 4, so the peer always gets 4 tracks
-  const micSplitter = audioContext.createChannelSplitter(4);
+  const micSplitter = audioContext.createChannelSplitter(channels);
   source.connect(micSplitter);
+  const leftNode = audioContext.createGain({channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers'});
+  const rightNode = audioContext.createGain({channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers'});
+  micSplitter.connect(leftNode, 0);
+  micSplitter.connect(rightNode, 1);
 
-  // hear the inputs locally, level set by the Local Gain slider
-  source.connect(localGainNode);
+  leftNode.connect(RTCdestination);
+  rightNode.connect(RTCdestination2);
 
+  const audioOnlyStream2 = new MediaStream(stream2.getAudioTracks());
+  audioOnlyStream2.channelCount = channels;
+  audioOnlyStream2.channelCountMode = 'explicit';
+  audioOnlyStream2.channelInterpretation = 'discrete';
+  const source2 = audioContext.createMediaStreamSource(audioOnlyStream2);
+  source2.channelCount = channels; // Set to stereo
+  source2.channelCountMode = 'explicit';
+  const micSplitter2 = audioContext.createChannelSplitter(channels);
+  source2.connect(micSplitter2);
+  const leftNode2 = audioContext.createGain({channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers'});
+  const rightNode2 = audioContext.createGain({channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers'});
+  micSplitter2.connect(leftNode2, 0);
+  micSplitter2.connect(rightNode2, 1);
+
+  leftNode2.connect(RTCdestination3);
+  rightNode2.connect(RTCdestination4);
+
+  //uncomment below line to hear the merged audio locally
+  //source.connect(audioContext.destination);
+  
   //start the microphone input
   await audioContext.resume();
   
@@ -371,14 +450,10 @@ async function openUserMedia() {
 
   //add the video and audio tracks to the combined stream -> out
   stream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
-  for (let i = 0; i < 4; i++) {
-    // 🎯 Send to WebRTC
-    const channelNode = audioContext.createGain({channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers'});
-    const RTCdestination = audioContext.createMediaStreamDestination( { channelCount: channels, channelCountMode: 'explicit', channelInterpretation: 'speaker' });
-    micSplitter.connect(channelNode, i);
-    channelNode.connect(RTCdestination);
-    RTCdestination.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
-  }
+  RTCdestination.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+  RTCdestination2.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+  RTCdestination3.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+  RTCdestination4.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
   combinedStream.getTracks().forEach(track => {
     //.log(`Track ${track.kind} settings:`, track.getSettings());
     //console.log(`Track ${track.kind} constraints:`, track.getConstraints());
@@ -409,41 +484,20 @@ async function getAudioInputDevices() {
     .then(devices => {
       const audioInputDevices = devices.filter(device => device.kind === 'audioinput');
       const audioInputSelect = document.getElementById('audioInputSelect');
+      const audioInputSelect2 = document.getElementById('audioInputSelect2');
       audioInputSelect.innerHTML = '';
+      audioInputSelect2.innerHTML = '';
       audioInputDevices.forEach(device => {
         const option = document.createElement('option');
         option.value = device.deviceId;
         option.textContent = device.label || `Microphone ${audioInputDevices.indexOf(device) + 1}`;
         audioInputSelect.appendChild(option);
+        audioInputSelect2.appendChild(option.cloneNode(true));
       });
     })
     .catch(error => {
       console.error('Error getting audio input devices:', error);
     });
-}
-
-async function getAudioOutputDevices() {
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const audioOutputDevices = devices.filter(device => device.kind === 'audiooutput');
-    const audioOutputSelect = document.getElementById('audioOutputSelect');
-    audioOutputSelect.innerHTML = '';
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = 'system default';
-    audioOutputSelect.appendChild(defaultOption);
-    audioOutputDevices.forEach(device => {
-      // 'default' duplicates the system default entry above
-      if (device.deviceId === 'default') return;
-      const option = document.createElement('option');
-      option.value = device.deviceId;
-      option.textContent = device.label || `Speaker ${audioOutputDevices.indexOf(device) + 1}`;
-      audioOutputSelect.appendChild(option);
-    });
-    audioOutputSelect.value = outputDevice;
-  } catch (error) {
-    console.error('Error getting audio output devices:', error);
-  }
 }
 
 async function getVideoInputDevices() {
