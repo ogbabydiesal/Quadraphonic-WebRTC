@@ -159,15 +159,25 @@ function mungeSDP(sdp) {
 }
 
 
+// same room every session, so there's no new code to share each time
+const FIXED_ROOM_ID = '123distantstreams22123';
+
+async function clearCandidates(roomRef) {
+  for (const name of ['callerCandidates', 'calleeCandidates']) {
+    const candidates = await roomRef.collection(name).get();
+    await Promise.all(candidates.docs.map(candidate => candidate.ref.delete()));
+  }
+}
+
 async function createRoom() {
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#joinBtn').disabled = true;
   const db = firebase.firestore();
-  const roomRef = await db.collection('rooms').doc();
-  
-  //comment this line out and remove fixedRoomId above when you want to use a secret pass
-  //roomId = fixedRoomId;
-  
+  const roomRef = db.collection('rooms').doc(FIXED_ROOM_ID);
+
+  // the room is reused, so clear ICE candidates left over from an earlier session
+  await clearCandidates(roomRef);
+
   //console.log('Create PeerConnection with configuration: ', configuration);
   peerConnection = new RTCPeerConnection(configuration);
 
