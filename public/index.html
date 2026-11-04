@@ -37,12 +37,40 @@
         <select id="audioInputSelect" value="select audio input">
             <option disabled selected value="">scan for devices</option>
         </select>
-        <select id="audioInputSelect2" value="select audio input">
-            <option disabled selected value="">scan for devices</option>
+        <p>audio output</p>
+        <select id="audioOutputSelect" value="select audio output">
+            <option selected value="">default output</option>
         </select>
+        <label for="localGainSlider">Local Gain: </label>
+        <input type="range" id="localGainSlider" min="0" max="1" step="0.01" value="0.75">
+        <label for="peerGainSlider">Peer Gain: </label>
+        <input type="range" id="peerGainSlider" min="0" max="1" step="0.01" value="0.75">
         <p>video device</p>
         <select id="videoInputSelect" value="select video input">
             <option disabled selected value="">scan for devices</option>
+        </select>
+        <p>video overlay</p>
+        <select id="blendModeSelect">
+            <option value="normal">normal</option>
+            <option value="multiply">multiply</option>
+            <option value="screen">screen</option>
+            <option value="overlay" selected>overlay</option>
+            <option value="darken">darken</option>
+            <option value="lighten">lighten</option>
+            <option value="color-dodge">color-dodge</option>
+            <option value="color-burn">color-burn</option>
+            <option value="hard-light">hard-light</option>
+            <option value="soft-light">soft-light</option>
+            <option value="difference">difference</option>
+            <option value="exclusion">exclusion</option>
+            <option value="hue">hue</option>
+            <option value="saturation">saturation</option>
+            <option value="color">color</option>
+            <option value="luminosity">luminosity</option>
+        </select>
+        <select id="topVideoSelect">
+            <option value="remoteVideo" selected>remote video on top</option>
+            <option value="localVideo">local video on top</option>
         </select>
 
         <button id="cameraBtn">
