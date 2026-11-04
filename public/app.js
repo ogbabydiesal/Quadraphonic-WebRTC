@@ -139,6 +139,35 @@ function handleRemoteTrack(event) {
   }
   merger.connect(peerGainNode);
   audioContext.resume();
+
+  console.log('Peer audio tracks:', remoteAudioTracks.length,
+      remoteAudioTracks.map(track => track.getSettings().channelCount ?? '?').join(','), 'ch each');
+  console.log('Output device:', outputElement.sinkId || 'system default');
+  logChannelLevels('Peer level per channel', merger, 4);
+}
+
+// prints the peak of each channel of `node` every 2s for 20s, to see which
+// channels actually carry sound (all 0 = silent)
+function logChannelLevels(label, node, channelCount) {
+  const splitter = audioContext.createChannelSplitter(channelCount);
+  node.connect(splitter);
+  const analysers = [];
+  for (let i = 0; i < channelCount; i++) {
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    splitter.connect(analyser, i);
+    analysers.push(analyser);
+  }
+  const buffer = new Float32Array(2048);
+  let runs = 0;
+  const timer = setInterval(() => {
+    const peaks = analysers.map(analyser => {
+      analyser.getFloatTimeDomainData(buffer);
+      return buffer.reduce((max, v) => Math.max(max, Math.abs(v)), 0).toFixed(3);
+    });
+    console.log(label + ':', peaks.map((p, i) => `ch${i + 1} ${p}`).join('  '));
+    if (++runs >= 10) clearInterval(timer);
+  }, 2000);
 }
 
 function mungeSDP(sdp) {
@@ -394,6 +423,7 @@ async function openUserMedia() {
   //start the microphone input
   await audioContext.resume();
   await outputElement.play();
+  logChannelLevels('Input level per channel (sent to peer)', source, 4);
   
   // 🎥 Merge with video
   const combinedStream = new MediaStream();
