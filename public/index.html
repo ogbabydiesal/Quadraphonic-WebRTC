@@ -4,9 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Distant Streams - October 2025</title>
-    <link href="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.css" rel="stylesheet">
-    <script src="https://unpkg.com/material-components-web@latest/dist/material-components-web.min.js"></script>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 
     <!-- update the version number as needed -->
     <script defer src="/__/firebase/7.13.1/firebase-app.js"></script>
@@ -29,15 +26,16 @@
 
 <div id="infoContainer">
     <div id="buttons">
-        <p>distant-streams is a web application that allows two remote performers to share quadraphonic sound in real-time over WebRTC.</p>
+        <p>quadraphonic p2p streaming over WebRTC.</p>
+        <p><a href="https://www.firefox.com/en-US/landing/get/?utm_medium=paidsearch&utm_source=google-rsa&utm_campaign=fx-performance&utm_content=Brand&gclsrc=aw.ds&gad_source=1&gad_campaignid=21953014515&gclid=EAIaIQobChMIxLzDmob6lwMVj-CfCR0lDBccEAAYASAAEgIrqfD_BwE">firefox</a> only (for now)</p>
         <button id="inDeviceBtn">
             <span>Search for Sound and Video Devices</span>
         </button>
-        <p>audio device</p>
+        <p>input device</p>
         <select id="audioInputSelect" value="select audio input">
             <option disabled selected value="">scan for devices</option>
         </select>
-        <p>audio output</p>
+        <p>ouput device</p>
         <select id="audioOutputSelect" value="select audio output">
             <option selected value="">default output</option>
         </select>
@@ -90,37 +88,17 @@
         <div id ="currentRoom">
            
         </div>
-        <div
-        class="mdc-dialog"
-     id="room-dialog"
-     role="alertdialog"
-     aria-modal="true"
-     aria-labelledby="my-dialog-title"
-     aria-describedby="my-dialog-content">
-    <div class="mdc-dialog__container">
-        <div class="mdc-dialog__surface">
-            <h3 id="my-dialog-title">Join room</h3>
-            <div id="my-dialog-content">
-                Enter ID for room to join:
-                <div>
-                    <input type="text" id="room-id" value="123distantstreams22123">
-                    <label for="my-text-field">Room ID</label>
-                    <div></div>
-                </div>
-            </div>
-            <footer class="mdc-dialog__actions">
-                <button type="button" class="mdc-button mdc-dialog__button" data-mdc-dialog-action="no">
-                    <span class="mdc-button__label">Cancel</span>
-                </button>
-                <button id="confirmJoinBtn" type="button" class="mdc-button mdc-dialog__button"
-                        data-mdc-dialog-action="yes">
-                    <span class="mdc-button__label">Join</span>
-                </button>
-            </footer>
-        </div>
-    </div>
-    <div ></div>
-</div>
+        <dialog id="room-dialog" aria-labelledby="room-dialog-title">
+            <form method="dialog">
+                <h3 id="room-dialog-title">Join room</h3>
+                <label for="room-id">Room ID</label>
+                <input type="text" id="room-id" value="123distantstreams22123">
+                <footer>
+                    <button value="no">Cancel</button>
+                    <button id="confirmJoinBtn" value="yes">Join</button>
+                </footer>
+            </form>
+        </dialog>
     </div>
     
 </div>

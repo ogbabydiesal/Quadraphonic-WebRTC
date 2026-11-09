@@ -4,7 +4,6 @@ let audioContext = null;
 let channels = 2; // Default to stereo
 let audioTracks = [];
 let gains = [];
-mdc.ripple.MDCRipple.attachTo(document.querySelector('.mdc-button'));
 
 const configuration = {
   //  iceServers: [
@@ -54,7 +53,6 @@ function init() {
   document.getElementById('audioInputSelect').addEventListener('change', async (e) => {
     inputDevice = e.target.value;
     console.log('Selected input device:', inputDevice);
-
   });
   document.getElementById('audioOutputSelect').addEventListener('change', async (e) => {
     outputDevice = e.target.value;
@@ -79,7 +77,7 @@ function init() {
   document.querySelector('#hangupBtn').addEventListener('click', hangUp);
   document.querySelector('#createBtn').addEventListener('click', createRoom);
   document.querySelector('#joinBtn').addEventListener('click', joinRoom);
-  roomDialog = new mdc.dialog.MDCDialog(document.querySelector('#room-dialog'));
+  roomDialog = document.querySelector('#room-dialog');
 }
 
 // the video last in #videos paints on top; it gets the .blend class and the
@@ -285,16 +283,15 @@ function joinRoom() {
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#joinBtn').disabled = true;
 
-  document.querySelector('#confirmJoinBtn').
-      addEventListener('click', async () => {
-        //console.log('Join room button clicked');
-        roomId = document.querySelector('#room-id').value;
-        //console.log('Join room: ', roomId);
-        document.querySelector(
-            '#currentRoom').innerText = `Room ID: ${roomId} - You are the callee!`;
-        await joinRoomById(roomId);
-      }, {once: true});
-  roomDialog.open();
+  roomDialog.addEventListener('close', async () => {
+    if (roomDialog.returnValue !== 'yes') return;
+    roomId = document.querySelector('#room-id').value;
+    document.querySelector(
+        '#currentRoom').innerText = `Room ID: ${roomId} - You are the callee!`;
+    await joinRoomById(roomId);
+  }, {once: true});
+  roomDialog.returnValue = '';
+  roomDialog.showModal();
 }
 
 async function joinRoomById(roomId) {

@@ -3,16 +3,12 @@ html{
 }
 
 body {
-    color: rgba(0, 0, 0, 0.87);
-    font-family: 'Times New Roman', Times, serif;
     margin: 0;
     padding: 0;
 }
 
 h1 {
     font-size: 0.6em;
-    font-weight: normal;
-    font-style: italic;
     z-index: 1000;
 }
 
@@ -21,6 +17,7 @@ video {
     top: 0;
     left: 0;
     width: 100vw;
+    height:100vh;
     height: auto;
     object-fit: cover;
 }
@@ -37,9 +34,6 @@ video {
     justify-content: center;
     width:50px;
     height:50px;
-    background-color: rgba(255, 255, 255, 0.3);
-    border-radius: 9px;
-    border: black 1px solid;
     text-align: center;
     cursor: pointer;
     position: fixed;
@@ -56,7 +50,6 @@ video {
 }
 
 #load {
-    color: rgba(0, 0, 0, 0.4);
     text-align: center;
     font-size: 13px;
 }
@@ -64,15 +57,13 @@ video {
 #buttons {
     margin:8px;
     display: flex;;
-    border-style: solid;
-    border-width: 1px;
     width:200px;
     flex-direction: column;
-    background-color: rgba(255, 255, 255, 0.3);
     top:100px;
-    height: 80vh;
     backdrop-filter: blur(8px);
-    border-radius: 8px;
+    border-style:solid;
+    border-width:1px;
+    border-color:black;
 }
 
 #infoContainer {
@@ -88,25 +79,15 @@ video {
 
 p {
     margin: 10px 10px 8px 8px;
-    font-size: 12px;
-    color: #1d1d1d;
 }
 
 select {
-    font-family: 'Courier New', Courier, monospace;
     margin: 0px 10px 8px 10px;
     font-size: 12px;
-    background: transparent;
-    border-radius: 8px;
 }
 
 button {
-    font-style: italic;
-    font-family: 'Courier New', Courier, monospace;
     margin: 0px 10px 8px 10px;
-    background: transparent;
-    border: 1px solid darkgray;
-    border-radius: 8px;
     font-size: 0.65em;
     cursor: pointer;
 }
@@ -117,19 +98,22 @@ button {
     width:180px;
 }   
 
+.bullet {
+    padding:10px;
+    font-size: 1em;
+    border-radius:35px;
+    background-color:red;
+}
+
 input[type="range"] {
     margin: 0px 10px 8px 10px; /* inset like the selects and buttons */
     padding:0px;
     box-sizing: border-box;
-    -webkit-appearance: none;
-    appearance: none;
-    background: rgba(255, 255, 255, 0.3);
     border-radius: 35px;
-    border: 1px solid darkgray;
     cursor: pointer;
 }
 
-input[type="range"]::-webkit-slider-thumb {
+/* input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 20px;
@@ -137,19 +121,80 @@ input[type="range"]::-webkit-slider-thumb {
     background: darkgray;
     cursor: pointer;
     border-radius: 55px;
-    border: 1px solid darkgray;
-}
+} */
 
+/* gain slider font stuff */
 label {
-    font-family: 'Courier New', Courier, monospace;
     margin: 0px 10px 8px 10px;
-    font-size: 0.6em;
 }
 
-@media (max-width: 600px) {
+@media (min-height: 300px) {
     body, #message {
         margin-top: 0;
         background: white;
         box-shadow: none;
     }
+
+    #infoContainer {
+        position: fixed;
+        inset: 0;
+        align-items: flex-start;
+        justify-content: flex-start;
+        box-sizing: border-box;
+        padding: 60px 8px 8px;
+        
+    }
+
+    #buttons {
+    
+        box-sizing: border-box;
+        width: min(200px, 100%);
+        max-height: calc(100vh - 76px);
+        overflow-y: auto;
+        overflow-x:hidden;
+
+    }
+}
+
+/* Join room dialog (native <dialog>) */
+#room-dialog {
+    border: 1px solid black;
+    padding: 12px;
+    width: min(260px, calc(100vw - 32px));
+    box-sizing: border-box;
+}
+
+#room-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(4px);
+}
+
+#room-dialog h3 {
+    margin: 0 0 10px;
+    font-size: 0.9em;
+}
+
+#room-dialog form {
+    display: flex;
+    flex-direction: column;
+}
+
+#room-dialog label {
+    margin: 0 0 4px;
+    font-size: 0.75em;
+}
+
+#room-dialog input[type="text"] {
+    margin-bottom: 12px;
+    font-size: 12px;
+}
+
+#room-dialog footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+#room-dialog footer button {
+    margin: 0;
 }
