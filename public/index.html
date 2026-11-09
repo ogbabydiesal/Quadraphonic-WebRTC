@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Distant Streams - October 2025</title>
+    <title>distant streams</title>
 
     <!-- update the version number as needed -->
     <script defer src="/__/firebase/7.13.1/firebase-app.js"></script>
@@ -17,16 +17,16 @@
 <body>
 
 <div id="videos" >
-    <video id="localVideo" muted autoplay playsinline style="display:none"></video>
-    <video id="remoteVideo" autoplay playsinline style="display:none" class="blend"></video>
+    <video id="localVideo" muted autoplay playsinline disablepictureinpicture style="display:none"></video>
+    <video id="remoteVideo" autoplay playsinline disablepictureinpicture style="display:none" class="blend"></video>
 </div>
 <div id="info">
-    <h1>distant-streams~</h1>
+    <h1>distant streams~</h1>
 </div>
 
 <div id="infoContainer">
     <div id="buttons">
-        <p>quadraphonic p2p streaming over WebRTC.</p>
+        <p>quadraphonic p2p audio streaming over WebRTC.</p>
         <p><a href="https://www.firefox.com/en-US/landing/get/?utm_medium=paidsearch&utm_source=google-rsa&utm_campaign=fx-performance&utm_content=Brand&gclsrc=aw.ds&gad_source=1&gad_campaignid=21953014515&gclid=EAIaIQobChMIxLzDmob6lwMVj-CfCR0lDBccEAAYASAAEgIrqfD_BwE">firefox</a> only (for now)</p>
         <button id="inDeviceBtn">
             <span>Search for Sound and Video Devices</span>
@@ -92,10 +92,11 @@
             <form method="dialog">
                 <h3 id="room-dialog-title">Join room</h3>
                 <label for="room-id">Room ID</label>
-                <input type="text" id="room-id" value="123distantstreams22123">
+                <input type="text" id="room-id" placeholder="4-letter code" required minlength="4" maxlength="4" autocomplete="off" autocapitalize="none" spellcheck="false">
                 <footer>
-                    <button value="no">Cancel</button>
+                    <!-- Join comes first so Enter submits it; row-reverse keeps it on the right -->
                     <button id="confirmJoinBtn" value="yes">Join</button>
+                    <button value="no" formnovalidate>Cancel</button>
                 </footer>
             </form>
         </dialog>

@@ -186,24 +186,29 @@ function mungeSDP(sdp) {
 }
 
 
-// same room every session, so there's no new code to share each time
-const FIXED_ROOM_ID = '123distantstreams22123';
+// Short room codes so they're easy to read out and type. Lowercase only, and
+// no look-alikes (0/o, 1/l/i). Retry if the code is already taken.
+const ROOM_CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+const ROOM_CODE_LENGTH = 4;
 
-async function clearCandidates(roomRef) {
-  for (const name of ['callerCandidates', 'calleeCandidates']) {
-    const candidates = await roomRef.collection(name).get();
-    await Promise.all(candidates.docs.map(candidate => candidate.ref.delete()));
+function randomRoomCode() {
+  const values = crypto.getRandomValues(new Uint32Array(ROOM_CODE_LENGTH));
+  return Array.from(values, v => ROOM_CODE_CHARS[v % ROOM_CODE_CHARS.length]).join('');
+}
+
+async function newRoomRef(db) {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const roomRef = db.collection('rooms').doc(randomRoomCode());
+    if (!(await roomRef.get()).exists) return roomRef;
   }
+  throw new Error('Could not find a free room code');
 }
 
 async function createRoom() {
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#joinBtn').disabled = true;
   const db = firebase.firestore();
-  const roomRef = db.collection('rooms').doc(FIXED_ROOM_ID);
-
-  // the room is reused, so clear ICE candidates left over from an earlier session
-  await clearCandidates(roomRef);
+  const roomRef = await newRoomRef(db);
 
   //console.log('Create PeerConnection with configuration: ', configuration);
   peerConnection = new RTCPeerConnection(configuration);
@@ -285,7 +290,7 @@ function joinRoom() {
 
   roomDialog.addEventListener('close', async () => {
     if (roomDialog.returnValue !== 'yes') return;
-    roomId = document.querySelector('#room-id').value;
+    roomId = document.querySelector('#room-id').value.trim().toLowerCase();
     document.querySelector(
         '#currentRoom').innerText = `Room ID: ${roomId} - You are the callee!`;
     await joinRoomById(roomId);
