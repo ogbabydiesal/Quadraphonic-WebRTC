@@ -31,6 +31,7 @@ let outputElement = null;
 let localGainNode = null;
 let peerGainNode = null;
 let peerAudioConnected = false;
+let peerMerger = null; // the peer's 4 channels, rebuilt on every (re)connect
 
 let inputDevice = null;
 let outputDevice = ''; // '' = system default output
@@ -112,6 +113,7 @@ function setGain(gainNode, value) {
 // event's track, and build the quad graph a single time once all 4 audio
 // tracks are in the stream. Building it per event played the peer ~5x over.
 function handleRemoteTrack(event) {
+  if (event.target !== peerConnection) return; // from a replaced connection
   remoteStream.addTrack(event.track);
   if (peerAudioConnected) return;
 
@@ -119,7 +121,8 @@ function handleRemoteTrack(event) {
   if (remoteAudioTracks.length < 4) return; // wait for the rest of the channels
   peerAudioConnected = true;
 
-  let merger = audioContext.createChannelMerger(4);
+  const merger = audioContext.createChannelMerger(4);
+  peerMerger = merger;
   merger.channelCountMode = 'explicit';
   merger.channelInterpretation = 'speakers';
   audioTracks = [];
@@ -142,6 +145,20 @@ function handleRemoteTrack(event) {
       remoteAudioTracks.map(track => track.getSettings().channelCount ?? '?').join(','), 'ch each');
   console.log('Output device:', outputElement.sinkId || 'system default');
   logChannelLevels('Peer level per channel', merger, 4);
+}
+
+// a reconnect brings new tracks: drop the old peer audio graph and video
+function resetRemoteMedia() {
+  if (peerMerger) peerMerger.disconnect();
+  audioTracks.forEach(source => source.disconnect());
+  peerMerger = null;
+  audioTracks = [];
+  gains = [];
+  peerAudioConnected = false;
+  if (remoteStream) remoteStream.getTracks().forEach(track => track.stop());
+  remoteStream = new MediaStream();
+  const remoteVideoEl = document.querySelector('#remoteVideo');
+  if (remoteVideoEl.srcObject) remoteVideoEl.srcObject = remoteStream;
 }
 
 // prints the peak of each channel of `node` every 2s for 20s, to see which
@@ -204,84 +221,168 @@ async function newRoomRef(db) {
   throw new Error('Could not find a free room code');
 }
 
+// --- Rejoining -------------------------------------------------------------
+// A room lives as long as the caller keeps it open. Each connection attempt is
+// a numbered "session": the caller writes { offer, session } to the room, the
+// callee answers with { answer: {..., session} }, and every ICE candidate is
+// tagged with its session so leftovers from an earlier attempt are ignored.
+// When the connection drops, or the callee leaves or comes back, the caller
+// starts the next session on the same code and the callee answers it.
+let role = null; // 'caller' | 'callee'
+let session = 0;
+let currentRoomRef = null;
+let remoteCandidates = []; // { id, session, init } from the other side
+const appliedCandidates = new Set();
+let restartingSession = false;
+let disconnectTimer = null;
+const DISCONNECT_GRACE_MS = 5000; // a 'disconnected' link often recovers by itself
+
+function setStatus(message) {
+  const who = role === 'caller' ? 'You are the caller' : 'You are the callee';
+  document.querySelector('#currentRoom').innerText = `Room ID: ${roomId} - ${who} · ${message}`;
+}
+
+function listenForRemoteCandidates(collection) {
+  collection.onSnapshot(snapshot => {
+    snapshot.docChanges().forEach(change => {
+      if (change.type !== 'added') return;
+      const { session: candidateSession, ...init } = change.doc.data();
+      remoteCandidates.push({ id: change.doc.id, session: candidateSession, init });
+    });
+    applyRemoteCandidates();
+  });
+}
+
+// candidates can arrive before the matching offer/answer, so they wait here
+// until the current connection has its remote description
+function applyRemoteCandidates() {
+  const pc = peerConnection;
+  if (!pc || !pc.remoteDescription) return;
+  remoteCandidates
+      .filter(c => c.session === session && !appliedCandidates.has(c.id))
+      .forEach(c => {
+        appliedCandidates.add(c.id);
+        pc.addIceCandidate(new RTCIceCandidate(c.init))
+            .catch(error => console.warn('Could not add ICE candidate:', error));
+      });
+}
+
+function newPeerConnection(ownCandidates) {
+  closePeerConnection();
+  const thisSession = session;
+  const pc = new RTCPeerConnection(configuration);
+  peerConnection = pc;
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  pc.addEventListener('icecandidate', event => {
+    if (!event.candidate) return;
+    ownCandidates.add({ ...event.candidate.toJSON(), session: thisSession })
+        .catch(error => console.warn('Could not send ICE candidate:', error));
+  });
+  pc.addEventListener('track', handleRemoteTrack);
+  pc.addEventListener('connectionstatechange', () => onConnectionStateChange(pc));
+  return pc;
+}
+
+function closePeerConnection() {
+  clearTimeout(disconnectTimer);
+  if (peerConnection) peerConnection.close();
+  peerConnection = null;
+  resetRemoteMedia();
+}
+
+function onConnectionStateChange(pc) {
+  if (pc !== peerConnection) return; // an earlier, replaced connection
+  const state = pc.connectionState;
+  console.log(`Session ${session} connection: ${state}`);
+  clearTimeout(disconnectTimer);
+
+  if (state === 'connected') setStatus('connected');
+  if (role === 'callee') {
+    if (state === 'disconnected' || state === 'failed') setStatus('connection lost, waiting for the caller to reconnect…');
+    return;
+  }
+  if (state === 'failed') {
+    restartCallerSession('connection failed');
+  } else if (state === 'disconnected') {
+    setStatus('connection dropped, trying to recover…');
+    disconnectTimer = setTimeout(() => {
+      if (pc === peerConnection && pc.connectionState !== 'connected') {
+        restartCallerSession('connection dropped');
+      }
+    }, DISCONNECT_GRACE_MS);
+  }
+}
+
+async function deleteCandidates(roomRef) {
+  for (const name of ['callerCandidates', 'calleeCandidates']) {
+    const candidates = await roomRef.collection(name).get();
+    await Promise.all(candidates.docs.map(candidate => candidate.ref.delete()));
+  }
+}
+
 async function createRoom() {
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#joinBtn').disabled = true;
   const db = firebase.firestore();
   const roomRef = await newRoomRef(db);
-
-  //console.log('Create PeerConnection with configuration: ', configuration);
-  peerConnection = new RTCPeerConnection(configuration);
-
-  registerPeerConnectionListeners();
-
-  localStream.getTracks().forEach(track => {
-    peerConnection.addTrack(track, localStream);
-  });
-
-  // Code for collecting ICE candidates below
-  const callerCandidatesCollection = roomRef.collection('callerCandidates');
-
-  peerConnection.addEventListener('icecandidate', event => {
-    if (!event.candidate) {
-      //console.log('Got final candidate!');
-      return;
-    }
-    //console.log('Got candidate: ', event.candidate);
-    callerCandidatesCollection.add(event.candidate.toJSON());
-  });
-  // Code for collecting ICE candidates above
-
-  // Code for creating a room below
-  const offer = await peerConnection.createOffer();
-  
-  //MUNGE THE SDP
-  offer.sdp = mungeSDP(offer.sdp);
-  
-  await peerConnection.setLocalDescription(offer);
-  //console.log("SDP Offer:\n", peerConnection.localDescription.sdp);
-  //console.log('Created offer:', offer);
-
-  const roomWithOffer = { 
-    'offer': {
-      type: offer.type,
-      sdp: offer.sdp,
-    },
-  };
-  await roomRef.set(roomWithOffer);
-  //console.log('roomWithOffer:' + roomWithOffer)
+  role = 'caller';
   roomId = roomRef.id;
-  //console.log(`New room created with SDP offer. Room ID: ${roomRef.id}`);
-  //write the roomRef to the UI
-  
-  document.querySelector(
-      '#currentRoom').innerText = `Room ID: ${roomRef.id} - You are the caller!`;
-  // Code for creating a room above
+  currentRoomRef = roomRef;
 
-  peerConnection.addEventListener('track', handleRemoteTrack);
+  // these listeners stay for the life of the room; each session filters by number
+  roomRef.onSnapshot(onCallerRoomSnapshot);
+  listenForRemoteCandidates(roomRef.collection('calleeCandidates'));
+  await startCallerSession();
+}
 
-  // Listening for remote session description below
-  roomRef.onSnapshot(async snapshot => {
-    const data = snapshot.data();
-    if (!peerConnection.currentRemoteDescription && data && data.answer) {
-      //console.log('Got remote description: ', data.answer);
-      const rtcSessionDescription = new RTCSessionDescription(data.answer);
-      await peerConnection.setRemoteDescription(rtcSessionDescription);
-    }
-  });
-  // Listening for remote session description above
+async function startCallerSession() {
+  const roomRef = currentRoomRef;
+  await deleteCandidates(roomRef); // left over from the previous session
+  session += 1;
+  const thisSession = session;
+  remoteCandidates = [];
 
-  // Listen for remote ICE candidates below
-  roomRef.collection('calleeCandidates').onSnapshot(snapshot => {
-    snapshot.docChanges().forEach(async change => {
-      if (change.type === 'added') {
-        let data = change.doc.data();
-        //console.log(`Got new remote ICE candidate: ${JSON.stringify(data)}`);
-        await peerConnection.addIceCandidate(new RTCIceCandidate(data));
-      }
-    });
-  });
-  // Listen for remote ICE candidates above
+  const pc = newPeerConnection(roomRef.collection('callerCandidates'));
+  const offer = await pc.createOffer();
+  offer.sdp = mungeSDP(offer.sdp);
+  await pc.setLocalDescription(offer);
+  if (thisSession !== session) return; // superseded while we were waiting
+
+  // set() replaces the whole room, dropping the previous answer
+  await roomRef.set({ offer: { type: offer.type, sdp: offer.sdp }, session: thisSession });
+  setStatus(thisSession === 1 ? 'waiting for peer…' : 'waiting for peer to rejoin…');
+}
+
+async function restartCallerSession(reason) {
+  if (role !== 'caller' || restartingSession || !currentRoomRef) return;
+  restartingSession = true;
+  console.log(`Restarting session after: ${reason}`);
+  try {
+    await startCallerSession();
+  } catch (error) {
+    console.error('Could not restart session:', error);
+  } finally {
+    restartingSession = false;
+  }
+}
+
+async function onCallerRoomSnapshot(snapshot) {
+  const data = snapshot.data();
+  if (!data || data.session !== session) return;
+
+  // the callee hung up, or reopened the page and wants a fresh offer
+  if (data.calleeLeft === session) {
+    restartCallerSession('peer left');
+    return;
+  }
+
+  const pc = peerConnection;
+  if (data.answer && data.answer.session === session &&
+      pc && pc.signalingState === 'have-local-offer') {
+    await pc.setRemoteDescription(new RTCSessionDescription({ type: data.answer.type, sdp: data.answer.sdp }));
+    applyRemoteCandidates();
+    setStatus('peer joined, connecting…');
+  }
 }
 
 function joinRoom() {
@@ -290,77 +391,74 @@ function joinRoom() {
 
   roomDialog.addEventListener('close', async () => {
     if (roomDialog.returnValue !== 'yes') return;
-    roomId = document.querySelector('#room-id').value.trim().toLowerCase();
-    document.querySelector(
-        '#currentRoom').innerText = `Room ID: ${roomId} - You are the callee!`;
-    await joinRoomById(roomId);
+    await joinRoomById(document.querySelector('#room-id').value.trim().toLowerCase());
   }, {once: true});
   roomDialog.returnValue = '';
   roomDialog.showModal();
 }
 
-async function joinRoomById(roomId) {
+async function joinRoomById(id) {
   const db = firebase.firestore();
-  const roomRef = db.collection('rooms').doc(`${roomId}`);
+  const roomRef = db.collection('rooms').doc(id);
   const roomSnapshot = await roomRef.get();
-  //console.log('Got room:', roomSnapshot.exists);
 
-  if (roomSnapshot.exists) {
-    //console.log('Create PeerConnection with configuration: ', configuration);
-    peerConnection = new RTCPeerConnection(configuration);
-    registerPeerConnectionListeners();
-    localStream.getTracks().forEach(track => {
-      peerConnection.addTrack(track, localStream);
-    });
-
-    // Code for collecting ICE candidates below
-    const calleeCandidatesCollection = roomRef.collection('calleeCandidates');
-    peerConnection.addEventListener('icecandidate', event => {
-      if (!event.candidate) {
-        //console.log('Got final candidate!');
-        return;
-      }
-      //console.log('Got candidate: ', event.candidate);
-      calleeCandidatesCollection.add(event.candidate.toJSON());
-    });
-    // Code for collecting ICE candidates above
-
-    peerConnection.addEventListener('track', handleRemoteTrack);
-
-    // Code for creating SDP answer below
-    const offer = roomSnapshot.data().offer;
-    //console.log('Got offer:', offer);
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    //console.log("📥 Received offer SDP:\n", offer.sdp);
-    const answer = await peerConnection.createAnswer();
-    //console.log('Created answer:', answer);
-    await peerConnection.setLocalDescription(answer);
-
-    const roomWithAnswer = {
-      answer: {
-        type: answer.type,
-        sdp: answer.sdp,
-      },
-    };
-
-    await roomRef.update(roomWithAnswer);
-    // Code for creating SDP answer above
-
-    // Listening for remote ICE candidates below
-    roomRef.collection('callerCandidates').onSnapshot(snapshot => {
-      snapshot.docChanges().forEach(async change => {
-        if (change.type === 'added') {
-          let data = change.doc.data();
-          //console.log(`Got new remote ICE candidate: ${JSON.stringify(data)}`);
-          
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data));
-          //console.log("channel info here: " + peerConnection.localDescription.sdp);
-        }
-      });
-    });
-    // Listening for remote ICE candidates above
+  if (!roomSnapshot.exists || !roomSnapshot.data().session) {
+    document.querySelector('#currentRoom').innerText = `No room with code ${id}`;
+    document.querySelector('#createBtn').disabled = false;
+    document.querySelector('#joinBtn').disabled = false;
+    return;
   }
+
+  role = 'callee';
+  roomId = id;
+  currentRoomRef = roomRef;
+  setStatus('joining…');
+
+  // the current offer was already answered (most likely by us before a reload
+  // or a dropped connection), so ask the caller for a fresh one
+  const data = roomSnapshot.data();
+  if (data.answer && data.answer.session === data.session) {
+    await roomRef.update({ calleeLeft: data.session });
+  }
+
+  listenForRemoteCandidates(roomRef.collection('callerCandidates'));
+  roomRef.onSnapshot(onCalleeRoomSnapshot);
 }
+
+async function onCalleeRoomSnapshot(snapshot) {
+  if (!snapshot.exists) {
+    closePeerConnection();
+    setStatus('the caller closed the room');
+    return;
+  }
+  const data = snapshot.data();
+  if (!data.offer || !(data.session > session)) return; // nothing new
+  if (data.answer && data.answer.session === data.session) return; // already answered
+  if (data.calleeLeft === data.session) return; // a fresh offer is on its way
+
+  // a new session from the caller: answer it on a fresh connection
+  session = data.session;
+  const thisSession = session;
+  remoteCandidates = remoteCandidates.filter(c => c.session >= thisSession);
+  const pc = newPeerConnection(currentRoomRef.collection('calleeCandidates'));
+
+  await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+  applyRemoteCandidates();
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  if (thisSession !== session) return;
+
+  await currentRoomRef.update({ answer: { type: answer.type, sdp: answer.sdp, session: thisSession } });
+  setStatus('connecting…');
+}
+
+// best effort when the callee closes or reloads the tab; if this write doesn't
+// make it out, rejoining with the code still asks the caller for a fresh offer
+window.addEventListener('pagehide', () => {
+  if (role === 'callee' && currentRoomRef && session) {
+    currentRoomRef.update({ calleeLeft: session }).catch(() => {});
+  }
+});
 
 async function openUserMedia() {
   //debug the input device name
@@ -546,40 +644,22 @@ async function hangUp(e) {
   document.querySelector('#hangupBtn').disabled = true;
   document.querySelector('#currentRoom').innerText = '';
 
-  // Delete room on hangup
-  if (roomId) {
-    const db = firebase.firestore();
-    const roomRef = db.collection('rooms').doc(roomId);
-    const calleeCandidates = await roomRef.collection('calleeCandidates').get();
-    calleeCandidates.forEach(async candidate => {
-      await candidate.ref.delete();
-    });
-    const callerCandidates = await roomRef.collection('callerCandidates').get();
-    callerCandidates.forEach(async candidate => {
-      await candidate.ref.delete();
-    });
-    await roomRef.delete();
+  // The caller owns the room, so it deletes it. The callee only marks that it
+  // left, so the caller re-offers and the callee (or someone else) can rejoin.
+  if (currentRoomRef) {
+    try {
+      if (role === 'caller') {
+        await deleteCandidates(currentRoomRef);
+        await currentRoomRef.delete();
+      } else if (role === 'callee' && session) {
+        await currentRoomRef.update({ calleeLeft: session });
+      }
+    } catch (error) {
+      console.warn('Could not clean up room:', error);
+    }
   }
 
   document.location.reload(true);
-}
-
-function registerPeerConnectionListeners() {
-  peerConnection.addEventListener('icegatheringstatechange', () => {
-    //console.log(`ICE gathering state changed: ${peerConnection.iceGatheringState}`);
-  });
-
-  peerConnection.addEventListener('connectionstatechange', () => {
-    //console.log(`Connection state change: ${peerConnection.connectionState}`);
-  });
-
-  peerConnection.addEventListener('signalingstatechange', () => {
-    //console.log(`Signaling state change: ${peerConnection.signalingState}`);
-  });
-
-  peerConnection.addEventListener('iceconnectionstatechange ', () => {
-    //console.log(`ICE connection state change: ${peerConnection.iceConnectionState}`);
-  });
 }
 
 init();
