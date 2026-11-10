@@ -78,6 +78,7 @@ function init() {
   document.querySelector('#hangupBtn').addEventListener('click', hangUp);
   document.querySelector('#createBtn').addEventListener('click', createRoom);
   document.querySelector('#joinBtn').addEventListener('click', joinRoom);
+  document.querySelector('#copyRoomCodeBtn').addEventListener('click', copyRoomCode);
   roomDialog = document.querySelector('#room-dialog');
 }
 
@@ -238,8 +239,25 @@ let disconnectTimer = null;
 const DISCONNECT_GRACE_MS = 5000; // a 'disconnected' link often recovers by itself
 
 function setStatus(message) {
-  const who = role === 'caller' ? 'You are the caller' : 'You are the callee';
-  document.querySelector('#currentRoom').innerText = `Room ID: ${roomId} - ${who} · ${message}`;
+  const who = role === 'caller' ? 'You are the caller, send this code to a friend and have them "Join Room"' : 'You are the callee';
+  document.querySelector('#roomCode').textContent = roomId;
+  document.querySelector('#roomCodeRow').hidden = !roomId;
+  document.querySelector('#roomStatus').textContent = `${who} · ${message}`;
+}
+
+async function copyRoomCode() {
+  const button = document.querySelector('#copyRoomCodeBtn');
+  try {
+    await navigator.clipboard.writeText(roomId);
+    button.textContent = 'copied!';
+  } catch (error) {
+    // clipboard blocked: select the code so it can be copied by hand
+    console.warn('Could not copy room code:', error);
+    getSelection().selectAllChildren(document.querySelector('#roomCode'));
+    button.textContent = 'press ⌘/ctrl+C';
+  }
+  clearTimeout(copyRoomCode.timer);
+  copyRoomCode.timer = setTimeout(() => { button.textContent = 'copy'; }, 1500);
 }
 
 function listenForRemoteCandidates(collection) {
@@ -403,7 +421,7 @@ async function joinRoomById(id) {
   const roomSnapshot = await roomRef.get();
 
   if (!roomSnapshot.exists || !roomSnapshot.data().session) {
-    document.querySelector('#currentRoom').innerText = `No room with code ${id}`;
+    document.querySelector('#roomStatus').textContent = `No room with code ${id}`;
     document.querySelector('#createBtn').disabled = false;
     document.querySelector('#joinBtn').disabled = false;
     return;
@@ -642,7 +660,8 @@ async function hangUp(e) {
   document.querySelector('#joinBtn').disabled = true;
   document.querySelector('#createBtn').disabled = true;
   document.querySelector('#hangupBtn').disabled = true;
-  document.querySelector('#currentRoom').innerText = '';
+  document.querySelector('#roomCodeRow').hidden = true;
+  document.querySelector('#roomStatus').textContent = '';
 
   // The caller owns the room, so it deletes it. The callee only marks that it
   // left, so the caller re-offers and the callee (or someone else) can rejoin.

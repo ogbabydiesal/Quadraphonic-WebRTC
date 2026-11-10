@@ -85,8 +85,12 @@
         <button disabled id="hangupBtn">
             <span>Hangup</span>
         </button>
-        <div id ="currentRoom">
-           
+        <div id="currentRoom">
+            <div id="roomCodeRow" hidden>
+                <code id="roomCode" aria-label="Room code"></code>
+                <button id="copyRoomCodeBtn" type="button">copy</button>
+            </div>
+            <div id="roomStatus"></div>
         </div>
         <dialog id="room-dialog" aria-labelledby="room-dialog-title">
             <form method="dialog">
